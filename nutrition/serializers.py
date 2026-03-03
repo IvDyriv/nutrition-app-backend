@@ -19,7 +19,8 @@ class ProductNutrientSerializer(serializers.ModelSerializer):
 class ProductListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
-        fields = ["id", "name", "brand", "category"]
+        fields = ["id", "name", "brand", "category", "tags", "properties"]
+
 
 
 class ProductDetailSerializer(serializers.ModelSerializer):
@@ -32,5 +33,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "name",
             "brand",
             "category",
+            "tags",
+            "properties",
             "product_nutrients",
         ]

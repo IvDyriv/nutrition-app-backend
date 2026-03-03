@@ -42,7 +42,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'nutrition',
     'rest_framework',
-    'drf_spectacular'
+    'drf_spectacular',
+    'django.contrib.postgres',
 ]
 
 MIDDLEWARE = [

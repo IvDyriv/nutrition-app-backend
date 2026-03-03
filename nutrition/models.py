@@ -1,4 +1,6 @@
 from django.db import models
+from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex
 
 
 class TimeStampedModel(models.Model):
@@ -18,6 +20,26 @@ class Product(TimeStampedModel):
     data_source = models.CharField(max_length=50, default="USDA")
 
     is_active = models.BooleanField(default=True)
+
+    def __str__(self) -> str:
+        return self.name
+
+    tags = ArrayField(
+        base_field=models.CharField(max_length=50),
+        default=list,
+        blank=True,
+    )
+    properties = ArrayField(
+        base_field=models.CharField(max_length=50),
+        default=list,
+        blank=True,
+    )
+
+    class Meta:
+        indexes = [
+            GinIndex(fields=["tags"], name="product_tags_gin"),
+            GinIndex(fields=["properties"], name="product_props_gin"),
+        ]
 
     def __str__(self) -> str:
         return self.name
