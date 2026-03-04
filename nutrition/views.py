@@ -8,8 +8,55 @@ from .serializers import ProductListSerializer, ProductDetailSerializer
     summary="Products catalog",
     description="Returns paginated list of products. Supports search by name.",
     parameters=[
-        OpenApiParameter(name="search", required=False, type=str, description="Search by product name"),
-        OpenApiParameter(name="page", required=False, type=int, description="Page number"),
+        OpenApiParameter(
+            name="search",
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="Search by product name"
+        ),
+
+        OpenApiParameter(
+            name="page",
+            type=int,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="Page number"
+        ),
+
+        OpenApiParameter(
+            name="tag",
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            many=True,
+            description="Filter by tags (AND). Example: ?tag=low_cal&tag=carb"
+        ),
+
+        OpenApiParameter(
+            name="tag_any",
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="Filter by tags (OR). Example: ?tag_any=low_cal,carb"
+        ),
+
+        OpenApiParameter(
+            name="property",
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            many=True,
+            description="Filter by properties (AND). Example: ?property=hi-fat&property=hi-cal"
+        ),
+
+        OpenApiParameter(
+            name="property_any",
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="Filter by properties (OR). Example: ?property_any=hi-fat,hi-cal"
+        ),
     ],
     responses=ProductListSerializer(many=True),
 )

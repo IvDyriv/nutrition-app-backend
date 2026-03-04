@@ -7,4 +7,3 @@ db.sqlite3
 .env.*
 .idea/
 .vscode/
-data/
