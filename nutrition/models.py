@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
+from decimal import Decimal
 
 
 class TimeStampedModel(models.Model):
@@ -82,3 +83,106 @@ class ProductNutrient(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.product_id} - {self.nutrient_id}: {self.amount_per_100g} per 100g"
+
+
+class SexChoices(models.TextChoices):
+    MALE = "male", "Male"
+    FEMALE = "female", "Female"
+    NA = "na", "N/A"
+
+
+class ActivityChoices(models.TextChoices):
+    STATIC = "static", "Static"
+    MILD = "mild", "Mild"
+    MODERATE = "moderate", "Moderate"
+    HIGH = "high", "High"
+    EXHAUSTING = "exhausting", "Exhausting"
+
+
+class GoalChoices(models.TextChoices):
+    MAINTENANCE = "maintenance", "Maintenance"
+    CUT = "cut", "Cut"
+    BULK = "bulk", "Bulk"
+
+
+class UserProfile(TimeStampedModel):
+    age = models.PositiveIntegerField()
+    sex = models.CharField(
+        max_length=10,
+        choices=SexChoices.choices,
+        default=SexChoices.NA,
+    )
+    height_cm = models.DecimalField(max_digits=6, decimal_places=2)
+    weight_kg = models.DecimalField(max_digits=6, decimal_places=2)
+    body_fat_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    activity = models.CharField(
+        max_length=20,
+        choices=ActivityChoices.choices,
+        default=ActivityChoices.MODERATE,
+    )
+    goal = models.CharField(
+        max_length=20,
+        choices=GoalChoices.choices,
+        default=GoalChoices.MAINTENANCE,
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["sex", "age"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.sex} / {self.age}y / {self.weight_kg}kg"
+
+
+class NutrientNorm(TimeStampedModel):
+    nutrient = models.ForeignKey(
+        Nutrient,
+        on_delete=models.CASCADE,
+        related_name="norms",
+    )
+    sex = models.CharField(
+        max_length=10,
+        choices=SexChoices.choices,
+        default=SexChoices.NA,
+    )
+    age_min = models.PositiveIntegerField()
+    age_max = models.PositiveIntegerField()
+
+    recommended_amount = models.DecimalField(max_digits=10, decimal_places=4)
+    upper_limit = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+    )
+
+    source = models.CharField(max_length=255, blank=True, default="")
+    note = models.TextField(blank=True, default="")
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["sex", "age_min", "age_max"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(age_min__gte=0),
+                name="norm_age_min_non_negative",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(age_max__gte=0),
+                name="norm_age_max_non_negative",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(recommended_amount__gte=0),
+                name="norm_recommended_amount_non_negative",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.nutrient.name} / {self.sex} / {self.age_min}-{self.age_max}"

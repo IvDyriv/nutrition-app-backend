@@ -1,7 +1,20 @@
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework import generics, filters
 from .models import Product
-from .serializers import ProductListSerializer, ProductDetailSerializer
+from .serializers import ProductListSerializer, ProductDetailSerializer, NormsResponseSerializer
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from nutrition.serializers import NormsInputSerializer
+from nutrition.services.norms import (
+    calc_bmi,
+    calculate_bmr,
+    calculate_tdee,
+    calculate_macro_targets,
+    get_micro_norms,
+    q,
+)
+
 
 
 @extend_schema(
@@ -96,3 +109,75 @@ class ProductListView(generics.ListAPIView):
 class ProductDetailView(generics.RetrieveAPIView):
     queryset = Product.objects.filter(is_active=True).prefetch_related("product_nutrients__nutrient")
     serializer_class = ProductDetailSerializer
+
+
+
+@extend_schema(
+    summary="Calculate nutrition norms",
+    description="Calculates BMI, BMR, TDEE, macro targets and micronutrient norms based on user input.",
+    request=NormsInputSerializer,
+    responses={200: NormsResponseSerializer},
+)
+class NormsCalculateView(APIView):
+    def post(self, request, *args, **kwargs):
+        serializer = NormsInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+
+        age = data["age"]
+        sex = data["sex"]
+        height_cm = data["height_cm"]
+        weight_kg = data["weight_kg"]
+        body_fat_percent = data.get("body_fat_percent")
+        activity = data["activity"]
+        goal = data.get("goal", "maintenance")
+
+        bmi = q(calc_bmi(weight_kg, height_cm))
+        bmr = calculate_bmr(
+            weight=weight_kg,
+            height=height_cm,
+            sex=sex,
+            age=age,
+            body_fat_percent=body_fat_percent,
+        )
+        tdee = calculate_tdee(
+            weight=weight_kg,
+            height=height_cm,
+            sex=sex,
+            age=age,
+            activity=activity,
+            body_fat_percent=body_fat_percent,
+        )
+        macro_targets = calculate_macro_targets(tdee, goal)
+
+        micro_targets_qs = get_micro_norms(age=age, sex=sex)
+
+        seen_nutrients = set()
+        micro_targets = []
+        for item in micro_targets_qs:
+
+            if item.nutrient_id in seen_nutrients:
+                continue
+            seen_nutrients.add(item.nutrient_id)
+
+            micro_targets.append({
+                "nutrient_id": item.nutrient.id,
+                "nutrient_name": item.nutrient.name,
+                "unit": item.nutrient.unit,
+                "recommended_amount": item.recommended_amount,
+                "upper_limit": item.upper_limit,
+                "source": item.source,
+                "note": item.note,
+            })
+
+        return Response(
+            {
+                "bmi": bmi,
+                "bmr": bmr,
+                "tdee": tdee,
+                "macro_targets": macro_targets,
+                "micro_targets": micro_targets,
+            },
+            status=status.HTTP_200_OK,
+        )
