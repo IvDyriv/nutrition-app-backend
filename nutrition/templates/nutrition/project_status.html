@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nutrition Project Status</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background: #f7f9fc;
+            color: #222;
+        }
+        h1, h2 {
+            color: #1f3c88;
+        }
+        .section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+        .card {
+            background: #eef3ff;
+            padding: 16px;
+            border-radius: 10px;
+        }
+        .number {
+            font-size: 28px;
+            font-weight: bold;
+            margin-top: 8px;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        a {
+            color: #1f3c88;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .status-ok {
+            color: green;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Nutrition App – Project Status</h1>
+    <p class="status-ok">Current backend status: active and working</p>
+
+    <div class="section">
+        <h2>Database Overview</h2>
+        <div class="grid">
+            <div class="card">
+                <div>Products</div>
+                <div class="number">{{ products_count }}</div>
+            </div>
+            <div class="card">
+                <div>Nutrients</div>
+                <div class="number">{{ nutrients_count }}</div>
+            </div>
+            <div class="card">
+                <div>ProductNutrient rows</div>
+                <div class="number">{{ product_nutrients_count }}</div>
+            </div>
+            <div class="card">
+                <div>Nutrient norms</div>
+                <div class="number">{{ nutrient_norms_count }}</div>
+            </div>
+            <div class="card">
+                <div>User profiles</div>
+                <div class="number">{{ user_profiles_count }}</div>
+            </div>
+            <div class="card">
+                <div>User preferences</div>
+                <div class="number">{{ user_preferences_count }}</div>
+            </div>
+            <div class="card">
+                <div>Meal logs</div>
+                <div class="number">{{ meal_logs_count }}</div>
+            </div>
+            <div class="card">
+                <div>Meal log items</div>
+                <div class="number">{{ meal_log_items_count }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Implemented Features</h2>
+        <ul>
+            {% for feature in ready_features %}
+                <li>{{ feature }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Main Links</h2>
+        <ul>
+            {% for link in main_links %}
+                <li><a href="{{ link.url }}">{{ link.name }}</a></li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Main API Endpoints</h2>
+        <ul>
+            <li><code>GET /api/v1/products/</code></li>
+            <li><code>GET /api/v1/products/{id}/</code></li>
+            <li><code>POST /api/v1/norms/calculate/</code></li>
+            <li><code>POST /api/v1/nutrition/analyze-meal/</code></li>
+            <li><code>POST /api/v1/nutrition/compare-with-norms/</code></li>
+        </ul>
+    </div>
+
+    <h2>Test API Endpoints</h2>
+
+        <ul>
+          <li>
+            <a href="/api/v1/products/" target="_blank">
+              GET /api/v1/products/
+            </a>
+          </li>
+
+          <li>
+            <a href="/api/v1/products/1/" target="_blank">
+              GET /api/v1/products/1/
+            </a>
+          </li>
+
+          <li>
+            <a href="/api/docs/" target="_blank">
+              Swagger API Docs
+            </a>
+          </li>
+
+          <li>
+            <a href="/admin/" target="_blank">
+              Django Admin
+            </a>
+          </li>
+        </ul>
+
+        <h2>Nutrition Analysis Endpoints</h2>
+
+        <ul>
+
+        <li>
+        POST /api/v1/nutrition/analyze-meal/
+        <br>
+        <a href="/api/docs/#/v1/v1_nutrition_analyze_meal_create" target="_blank">
+        Open in Swagger
+        </a>
+        </li>
+
+        <li>
+        POST /api/v1/nutrition/compare-with-norms/
+        <br>
+        <a href="/api/docs/#/v1/v1_nutrition_compare_with_norms_create" target="_blank">
+        Open in Swagger
+        </a>
+        </li>
+        </ul>
+
+        <h2>Quick Test Links</h2>
+
+        <ul>
+
+        <li>
+        <a href="/api/v1/products/?search=apple" target="_blank">
+        Search example (apple)
+        </a>
+        </li>
+
+        <li>
+        <a href="/api/v1/products/?tags=vegan" target="_blank">
+        Filter by tag
+        </a>
+        </li>
+
+        <li>
+        <a href="/api/v1/products/?properties=high_protein" target="_blank">
+        Filter by property
+        </a>
+        </li>
+
+        </ul>
+</body>
+</html>
+

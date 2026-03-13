@@ -1,11 +1,18 @@
 from drf_spectacular.utils import extend_schema, OpenApiParameter
+from django.shortcuts import render
 from rest_framework import generics, filters
-from .models import Product
+from .models import Product, Nutrient, ProductNutrient, NutrientNorm, UserProfile, UserPreferences, MealLog, MealLogItem
 from .serializers import ProductListSerializer, ProductDetailSerializer, NormsResponseSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from nutrition.serializers import NormsInputSerializer
+from nutrition.serializers import (
+    NormsInputSerializer,
+    AnalyzeMealInputSerializer,
+    AnalyzeMealResponseSerializer,
+    CompareWithNormsInputSerializer,
+    CompareWithNormsResponseSerializer,
+)
 from nutrition.services.norms import (
     calc_bmi,
     calculate_bmr,
@@ -14,7 +21,8 @@ from nutrition.services.norms import (
     get_micro_norms,
     q,
 )
-
+from nutrition.services.meal_analysis import analyze_meal
+from nutrition.services.norm_comparison import compare_meal_with_norms
 
 
 @extend_schema(
@@ -111,7 +119,6 @@ class ProductDetailView(generics.RetrieveAPIView):
     serializer_class = ProductDetailSerializer
 
 
-
 @extend_schema(
     summary="Calculate nutrition norms",
     description="Calculates BMI, BMR, TDEE, macro targets and micronutrient norms based on user input.",
@@ -181,3 +188,85 @@ class NormsCalculateView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+@extend_schema(
+    summary="Analyze meal",
+    description="Calculates total nutrients and macros for a meal based on selected products and grams.",
+    request=AnalyzeMealInputSerializer,
+    responses={200: AnalyzeMealResponseSerializer},
+)
+class AnalyzeMealView(APIView):
+    def post(self, request, *args, **kwargs):
+        serializer = AnalyzeMealInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            result = analyze_meal(serializer.validated_data["products"])
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(result, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    summary="Compare meal with norms",
+    description="Analyzes a meal and compares consumed nutrients with user nutrient norms.",
+    request=CompareWithNormsInputSerializer,
+    responses={200: CompareWithNormsResponseSerializer},
+)
+class CompareMealWithNormsView(APIView):
+    def post(self, request, *args, **kwargs):
+        serializer = CompareWithNormsInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+
+        try:
+            result = compare_meal_with_norms(
+                profile_id=data["profile_id"],
+                products_data=data["products"],
+            )
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(result, status=status.HTTP_200_OK)
+
+
+def project_status_view(request):
+    context = {
+        "products_count": Product.objects.count(),
+        "nutrients_count": Nutrient.objects.count(),
+        "product_nutrients_count": ProductNutrient.objects.count(),
+        "nutrient_norms_count": NutrientNorm.objects.count(),
+        "user_profiles_count": UserProfile.objects.count(),
+        "user_preferences_count": UserPreferences.objects.count(),
+        "meal_logs_count": MealLog.objects.count(),
+        "meal_log_items_count": MealLogItem.objects.count(),
+        "ready_features": [
+            "USDA import",
+            "Products list API",
+            "Product detail API",
+            "Search by name",
+            "Filter by tags/properties",
+            "Swagger / OpenAPI",
+            "Norms calculation (BMI, BMR, TDEE, macros, micros)",
+            "Analyze meal",
+            "Compare meal with norms",
+            "User preferences",
+            "Meal history models",
+        ],
+        "main_links": [
+            {"name": "Swagger Docs", "url": "/api/docs/"},
+            {"name": "Products API", "url": "/api/v1/products/"},
+            {"name": "Product #1", "url": "/api/v1/products/1/"},
+            {"name": "Admin", "url": "/admin/"},
+        ],
+    }
+    return render(request, "nutrition/project_status.html", context)

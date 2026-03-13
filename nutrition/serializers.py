@@ -83,3 +83,67 @@ class NormsResponseSerializer(serializers.Serializer):
     tdee = serializers.DecimalField(max_digits=10, decimal_places=2)
     macro_targets = MacroTargetsSerializer()
     micro_targets = MicroNormItemSerializer(many=True)
+
+
+class MealProductInputSerializer(serializers.Serializer):
+    product_id = serializers.IntegerField(min_value=1)
+    grams = serializers.DecimalField(max_digits=8, decimal_places=2, min_value=0.01)
+
+
+class AnalyzeMealInputSerializer(serializers.Serializer):
+    products = MealProductInputSerializer(many=True)
+
+
+class MealProductResultSerializer(serializers.Serializer):
+    product_id = serializers.IntegerField()
+    product_name = serializers.CharField()
+    grams = serializers.DecimalField(max_digits=8, decimal_places=2)
+
+
+class NutrientTotalSerializer(serializers.Serializer):
+    nutrient_id = serializers.IntegerField()
+    nutrient_name = serializers.CharField()
+    unit = serializers.CharField()
+    total_amount = serializers.DecimalField(max_digits=12, decimal_places=4)
+
+
+class MacroSummarySerializer(serializers.Serializer):
+    calories = serializers.DecimalField(max_digits=12, decimal_places=4)
+    protein_g = serializers.DecimalField(max_digits=12, decimal_places=4)
+    fat_g = serializers.DecimalField(max_digits=12, decimal_places=4)
+    carbs_g = serializers.DecimalField(max_digits=12, decimal_places=4)
+
+
+class AnalyzeMealResponseSerializer(serializers.Serializer):
+    products = MealProductResultSerializer(many=True)
+    macros = MacroSummarySerializer()
+    nutrients = NutrientTotalSerializer(many=True)
+
+
+class CompareWithNormsInputSerializer(serializers.Serializer):
+    profile_id = serializers.IntegerField(min_value=1)
+    products = MealProductInputSerializer(many=True)
+
+
+class NutrientComparisonSerializer(serializers.Serializer):
+    nutrient_id = serializers.IntegerField()
+    nutrient_name = serializers.CharField()
+    unit = serializers.CharField()
+    consumed_amount = serializers.DecimalField(max_digits=12, decimal_places=4)
+    recommended_amount = serializers.DecimalField(max_digits=12, decimal_places=4)
+    upper_limit = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=4,
+        allow_null=True,
+        required=False,
+    )
+    percent_of_norm = serializers.DecimalField(max_digits=8, decimal_places=2)
+    status = serializers.CharField()
+
+
+class CompareWithNormsResponseSerializer(serializers.Serializer):
+    profile_id = serializers.IntegerField()
+    products = MealProductResultSerializer(many=True)
+    macros = MacroSummarySerializer()
+    nutrients = NutrientTotalSerializer(many=True)
+    comparison = NutrientComparisonSerializer(many=True)

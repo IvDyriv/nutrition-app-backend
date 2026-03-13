@@ -186,3 +186,235 @@ class NutrientNorm(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.nutrient.name} / {self.sex} / {self.age_min}-{self.age_max}"
+
+
+from django.contrib.postgres.fields import ArrayField
+
+
+class DietTypeChoices(models.TextChoices):
+    OMNIVORE = "omnivore", "Omnivore"
+    VEGETARIAN = "vegetarian", "Vegetarian"
+    VEGAN = "vegan", "Vegan"
+    KETO = "keto", "Keto"
+    HIGH_PROTEIN = "high_protein", "High protein"
+
+
+class MealTypeChoices(models.TextChoices):
+    BREAKFAST = "breakfast", "Breakfast"
+    LUNCH = "lunch", "Lunch"
+    DINNER = "dinner", "Dinner"
+    SNACK = "snack", "Snack"
+
+
+class UserPreferences(TimeStampedModel):
+    user_profile = models.OneToOneField(
+        UserProfile,
+        on_delete=models.CASCADE,
+        related_name="preferences",
+    )
+
+    diet_type = models.CharField(
+        max_length=20,
+        choices=DietTypeChoices.choices,
+        default=DietTypeChoices.OMNIVORE,
+    )
+
+    preferred_tags = ArrayField(
+        base_field=models.CharField(max_length=50),
+        default=list,
+        blank=True,
+    )
+    excluded_tags = ArrayField(
+        base_field=models.CharField(max_length=50),
+        default=list,
+        blank=True,
+    )
+
+    preferred_properties = ArrayField(
+        base_field=models.CharField(max_length=50),
+        default=list,
+        blank=True,
+    )
+    excluded_properties = ArrayField(
+        base_field=models.CharField(max_length=50),
+        default=list,
+        blank=True,
+    )
+
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        indexes = [
+            GinIndex(fields=["preferred_tags"], name="pref_tags_gin"),
+            GinIndex(fields=["excluded_tags"], name="excl_tags_gin"),
+            GinIndex(fields=["preferred_properties"], name="pref_props_gin"),
+            GinIndex(fields=["excluded_properties"], name="excl_props_gin"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Preferences for profile #{self.user_profile_id}"
+
+
+class MealLog(TimeStampedModel):
+    user_profile = models.ForeignKey(
+        UserProfile,
+        on_delete=models.CASCADE,
+        related_name="meal_logs",
+    )
+    meal_type = models.CharField(
+        max_length=20,
+        choices=MealTypeChoices.choices,
+        default=MealTypeChoices.LUNCH,
+    )
+    logged_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-logged_at"]
+        indexes = [
+            models.Index(fields=["user_profile", "logged_at"]),
+            models.Index(fields=["meal_type"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_profile_id} / {self.meal_type} / {self.logged_at}"
+
+
+class MealLogItem(TimeStampedModel):
+    meal_log = models.ForeignKey(
+        MealLog,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="meal_log_items",
+    )
+    grams = models.DecimalField(max_digits=8, decimal_places=2)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["meal_log"]),
+            models.Index(fields=["product"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(grams__gt=0),
+                name="meal_log_item_grams_positive",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.product.name} / {self.grams}g"
+
+
+
+class MealTypeChoices(models.TextChoices):
+    BREAKFAST = "breakfast", "Breakfast"
+    LUNCH = "lunch", "Lunch"
+    DINNER = "dinner", "Dinner"
+    SNACK = "snack", "Snack"
+
+
+class UserPreferences(TimeStampedModel):
+    user_profile = models.OneToOneField(
+        UserProfile,
+        on_delete=models.CASCADE,
+        related_name="preferences",
+    )
+
+    diet_type = models.CharField(
+        max_length=20,
+        choices=DietTypeChoices.choices,
+        default=DietTypeChoices.OMNIVORE,
+    )
+
+    preferred_tags = ArrayField(
+        base_field=models.CharField(max_length=50),
+        default=list,
+        blank=True,
+    )
+    excluded_tags = ArrayField(
+        base_field=models.CharField(max_length=50),
+        default=list,
+        blank=True,
+    )
+
+    preferred_properties = ArrayField(
+        base_field=models.CharField(max_length=50),
+        default=list,
+        blank=True,
+    )
+    excluded_properties = ArrayField(
+        base_field=models.CharField(max_length=50),
+        default=list,
+        blank=True,
+    )
+
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        indexes = [
+            GinIndex(fields=["preferred_tags"], name="pref_tags_gin"),
+            GinIndex(fields=["excluded_tags"], name="excl_tags_gin"),
+            GinIndex(fields=["preferred_properties"], name="pref_props_gin"),
+            GinIndex(fields=["excluded_properties"], name="excl_props_gin"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Preferences for profile #{self.user_profile_id}"
+
+
+class MealLog(TimeStampedModel):
+    user_profile = models.ForeignKey(
+        UserProfile,
+        on_delete=models.CASCADE,
+        related_name="meal_logs",
+    )
+    meal_type = models.CharField(
+        max_length=20,
+        choices=MealTypeChoices.choices,
+        default=MealTypeChoices.LUNCH,
+    )
+    logged_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-logged_at"]
+        indexes = [
+            models.Index(fields=["user_profile", "logged_at"]),
+            models.Index(fields=["meal_type"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_profile_id} / {self.meal_type} / {self.logged_at}"
+
+
+class MealLogItem(TimeStampedModel):
+    meal_log = models.ForeignKey(
+        MealLog,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="meal_log_items",
+    )
+    grams = models.DecimalField(max_digits=8, decimal_places=2)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["meal_log"]),
+            models.Index(fields=["product"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(grams__gt=0),
+                name="meal_log_item_grams_positive",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.product.name} / {self.grams}g"
+
+

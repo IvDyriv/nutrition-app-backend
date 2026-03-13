@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Product, Nutrient, ProductNutrient, NutrientNorm, UserProfile
+from .models import Product, Nutrient, ProductNutrient, NutrientNorm, UserProfile, UserPreferences, MealLog, MealLogItem
 
 
 @admin.register(Product)
@@ -32,3 +32,43 @@ class NutrientNormAdmin(admin.ModelAdmin):
 class UserProfileAdmin(admin.ModelAdmin):
     list_display = ("id", "sex", "age", "height_cm", "weight_kg", "body_fat_percent", "activity", "goal", )
     list_filter = ("sex", "activity", "goal")
+
+
+@admin.register(UserPreferences)
+class UserPreferencesAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user_profile",
+        "diet_type",
+    )
+    list_filter = ("diet_type",)
+    search_fields = ("user_profile__id",)
+
+
+class MealLogItemInline(admin.TabularInline):
+    model = MealLogItem
+    extra = 1
+
+
+@admin.register(MealLog)
+class MealLogAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user_profile",
+        "meal_type",
+        "logged_at",
+    )
+    list_filter = ("meal_type", "logged_at")
+    search_fields = ("user_profile__id",)
+    inlines = [MealLogItemInline]
+
+
+@admin.register(MealLogItem)
+class MealLogItemAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "meal_log",
+        "product",
+        "grams",
+    )
+    search_fields = ("product__name",)
