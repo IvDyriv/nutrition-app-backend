@@ -4,7 +4,8 @@ from .views import (ProductListView,
                     AnalyzeMealView,
                     NormsCalculateView,
                     CompareMealWithNormsView,
-                    project_status_view)
+                    project_status_view,
+                    product_tags)
 
 
 urlpatterns = [
@@ -14,4 +15,5 @@ urlpatterns = [
     path("nutrition/analyze-meal/", AnalyzeMealView.as_view(), name="analyze-meal"),
     path("nutrition/compare-with-norms/", CompareMealWithNormsView.as_view(), name="compare-with-norms"),
     path("status/", project_status_view, name="project-status"),
+    path("products/tags/", product_tags, name="product-tags"),
 ]

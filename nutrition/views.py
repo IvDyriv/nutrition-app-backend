@@ -1,11 +1,13 @@
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from django.shortcuts import render
-from rest_framework import generics, filters
+from rest_framework import generics
+from .filters import WholeWordSearchFilter
 from .models import Product, Nutrient, ProductNutrient, NutrientNorm, UserProfile, UserPreferences, MealLog, MealLogItem
-from .serializers import ProductListSerializer, ProductDetailSerializer, NormsResponseSerializer
+from .serializers import ProductListSerializer, ProductDetailSerializer, NormsResponseSerializer, ProductTagsSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.decorators import api_view
 from nutrition.serializers import (
     NormsInputSerializer,
     AnalyzeMealInputSerializer,
@@ -13,6 +15,8 @@ from nutrition.serializers import (
     CompareWithNormsInputSerializer,
     CompareWithNormsResponseSerializer,
 )
+
+
 from nutrition.services.norms import (
     calc_bmi,
     calculate_bmr,
@@ -83,11 +87,12 @@ from nutrition.services.norm_comparison import compare_meal_with_norms
 )
 class ProductListView(generics.ListAPIView):
     serializer_class = ProductListSerializer
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [WholeWordSearchFilter]
     search_fields = ["name"]
 
     def get_queryset(self):
-        qs = Product.objects.all().order_by("id")
+        qs = Product.objects.all().prefetch_related(
+            "product_nutrients__nutrient").order_by("id")
 
         tags = self.request.query_params.getlist("tag")
         if tags:
@@ -115,7 +120,7 @@ class ProductListView(generics.ListAPIView):
     responses=ProductDetailSerializer,
 )
 class ProductDetailView(generics.RetrieveAPIView):
-    queryset = Product.objects.filter(is_active=True).prefetch_related("product_nutrients__nutrient")
+    queryset = Product.objects.filter(is_active=True).prefetch_related("product_nutrients__nutrient").order_by("id")
     serializer_class = ProductDetailSerializer
 
 
@@ -270,3 +275,38 @@ def project_status_view(request):
         ],
     }
     return render(request, "nutrition/project_status.html", context)
+
+
+@extend_schema(
+    responses={
+        200: {
+            "type": "object",
+            "properties": {
+                "tags": {"type": "array", "items": {"type": "string"}},
+                "properties": {"type": "array", "items": {"type": "string"}},
+            },
+        }
+    }
+)
+
+@extend_schema(
+    responses=ProductTagsSerializer,
+    summary="Product tags and properties",
+)
+@api_view(["GET"])
+def product_tags(request):
+    tags = set()
+    properties = set()
+
+    for product in Product.objects.all():
+        if product.tags:
+            tags.update(product.tags)
+        if product.properties:
+            properties.update(product.properties)
+
+    return Response({
+        "tags": sorted(tags),
+        "properties": sorted(properties),
+    })
+
+

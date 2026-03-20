@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from pathlib import Path
+from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
@@ -55,6 +56,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'drf_spectacular',
     'django.contrib.postgres',
+    'rest_framework_simplejwt.token_blacklist',
 ]
 
 MIDDLEWARE = [
@@ -145,6 +147,9 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": ["rest_framework.filters.SearchFilter"],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    )
 }
 
 SPECTACULAR_SETTINGS = {
@@ -153,3 +158,14 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
 }
 
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+}
+
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'noreply@nutrition_app.local'

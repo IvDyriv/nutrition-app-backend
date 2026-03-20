@@ -30,8 +30,9 @@ class NutrientNormAdmin(admin.ModelAdmin):
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ("id", "sex", "age", "height_cm", "weight_kg", "body_fat_percent", "activity", "goal", )
-    list_filter = ("sex", "activity", "goal")
+    list_display = ("id", "sex", "age", "height_cm", "weight_kg", "body_fat_percent", "activity", "goal", "is_verified", "verified_at")
+    list_filter = ("sex", "activity", "goal", "is_verified")
+    search_fields = ("user__username", "user__email")
 
 
 @admin.register(UserPreferences)
