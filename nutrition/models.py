@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
 from decimal import Decimal
+from django.contrib.auth.models import User
 
 
 class TimeStampedModel(models.Model):
@@ -106,14 +107,20 @@ class GoalChoices(models.TextChoices):
 
 
 class UserProfile(TimeStampedModel):
-    age = models.PositiveIntegerField()
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="profile",
+    )
+
+    age = models.PositiveIntegerField(null=True, blank=True)
     sex = models.CharField(
         max_length=10,
         choices=SexChoices.choices,
         default=SexChoices.NA,
     )
-    height_cm = models.DecimalField(max_digits=6, decimal_places=2)
-    weight_kg = models.DecimalField(max_digits=6, decimal_places=2)
+    height_cm = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    weight_kg = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     body_fat_percent = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -130,6 +137,12 @@ class UserProfile(TimeStampedModel):
         choices=GoalChoices.choices,
         default=GoalChoices.MAINTENANCE,
     )
+    verification_token = models.CharField(max_length=255, blank=True, null=True)
+    is_verified = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(blank=True, null=True)
+
+    password_reset_token = models.CharField(max_length=255, blank=True, null=True)
+    password_reset_requested_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         indexes = [
@@ -137,7 +150,7 @@ class UserProfile(TimeStampedModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.sex} / {self.age}y / {self.weight_kg}kg"
+        return f"{self.user.username} / {self.sex} / {self.age}y / {self.weight_kg}kg"
 
 
 class NutrientNorm(TimeStampedModel):
