@@ -2,6 +2,33 @@ from rest_framework import serializers
 from .models import Product, Nutrient, ProductNutrient
 
 
+def get_product_macros_data(product):
+    kcal = 0
+    protein = 0
+    fat = 0
+    carbs = 0
+
+    for item in product.product_nutrients.all():
+        nutrient_name = item.nutrient.name.lower()
+        amount = item.amount_per_100g or 0
+
+        if "energy" in nutrient_name or "calorie" in nutrient_name:
+            kcal = int(round(amount))
+        elif "protein" in nutrient_name:
+            protein = int(round(amount))
+        elif "total lipid" in nutrient_name or nutrient_name == "fat" or "fat" in nutrient_name:
+            fat = int(round(amount))
+        elif "carbohydrate" in nutrient_name or "carb" in nutrient_name:
+            carbs = int(round(amount))
+
+    return {
+        "kcal": kcal,
+        "protein": protein,
+        "fat": fat,
+        "carbs": carbs,
+    }
+
+
 class NutrientInlineSerializer(serializers.ModelSerializer):
     class Meta:
         model = Nutrient
@@ -17,14 +44,7 @@ class ProductNutrientSerializer(serializers.ModelSerializer):
 
 
 class ProductListSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Product
-        fields = ["id", "name", "brand", "category", "tags", "properties"]
-
-
-
-class ProductDetailSerializer(serializers.ModelSerializer):
-    product_nutrients = ProductNutrientSerializer(many=True)
+    macros = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -35,8 +55,34 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "category",
             "tags",
             "properties",
+            "macros",
+        ]
+
+    def get_macros(self, obj):
+        return get_product_macros_data(obj)
+
+
+
+class ProductDetailSerializer(serializers.ModelSerializer):
+    product_nutrients = ProductNutrientSerializer(many=True, read_only=True)
+    macros = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "name",
+            "brand",
+            "category",
+            "tags",
+            "properties",
+            "macros",
             "product_nutrients",
         ]
+
+    def get_macros(self, obj):
+        return get_product_macros_data(obj)
+
 
 
 class NormsInputSerializer(serializers.Serializer):
@@ -147,3 +193,15 @@ class CompareWithNormsResponseSerializer(serializers.Serializer):
     macros = MacroSummarySerializer()
     nutrients = NutrientTotalSerializer(many=True)
     comparison = NutrientComparisonSerializer(many=True)
+
+
+class ProductTagsSerializer(serializers.Serializer):
+    tags = serializers.ListField(child=serializers.CharField())
+    properties = serializers.ListField(child=serializers.CharField())
+
+
+class ProductMacrosSerializer(serializers.Serializer):
+    kcal = serializers.IntegerField()
+    protein = serializers.IntegerField()
+    fat = serializers.IntegerField()
+    carbs = serializers.IntegerField()
