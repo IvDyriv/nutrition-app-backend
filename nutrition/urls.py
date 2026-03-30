@@ -5,7 +5,7 @@ from .views import (ProductListView,
                     NormsCalculateView,
                     CompareMealWithNormsView,
                     project_status_view,
-                    product_tags)
+                    product_tags, ProductBatchView)
 
 
 urlpatterns = [
@@ -16,4 +16,5 @@ urlpatterns = [
     path("nutrition/compare-with-norms/", CompareMealWithNormsView.as_view(), name="compare-with-norms"),
     path("status/", project_status_view, name="project-status"),
     path("products/tags/", product_tags, name="product-tags"),
+    path("product/batch/", ProductBatchView.as_view(), name="product-batch"),
 ]

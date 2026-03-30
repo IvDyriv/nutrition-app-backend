@@ -9,6 +9,7 @@ USDA_IDS = {
     "protein": 1003,
     "fat": 1004,
     "carb": 1005,
+    "fiber": 1079,
 }
 
 
@@ -19,81 +20,84 @@ def safe_float(x):
         return 0.0
 
 
-def compute_tags(kcal, protein_g, fat_g, carb_g):
-    tags = []
+def compute_tag(kcal, protein_g, fat_g, carb_g):
 
-    if kcal > 0 and kcal < 60:
-        tags.append("low_cal")
+    if kcal < 60:
+        return "lo_cal"
 
     protein_kcal = protein_g * 4.0
     carb_kcal = carb_g * 4.0
     fat_kcal = fat_g * 9.0
-    total_macro_kcal = protein_kcal + carb_kcal + fat_kcal
 
-    if total_macro_kcal <= 0:
-        return tags or ["balanced"]
+    if kcal <= 0:
+        return "balanced"
 
-    p = protein_kcal / total_macro_kcal * 100.0
-    c = carb_kcal / total_macro_kcal * 100.0
-    f = fat_kcal / total_macro_kcal * 100.0
+    if protein_kcal > 0.60 * kcal:
+        return "prot"
+    if carb_kcal > 0.60 * kcal:
+        return "carb"
+    if fat_kcal > 0.60 * kcal:
+        return "fat"
 
-    if p > 60:
-        tags.append("protein")
-        return tags
-    if f > 60:
-        tags.append("fat")
-        return tags
-    if c > 60:
-        tags.append("carb")
-        return tags
+    if protein_kcal > 0.40 * kcal and fat_kcal > 0.25 * kcal:
+        return "prot-fat"
 
-    pairs = [
-        ("protein-fat", p, f),
-        ("fat-carb", f, c),
-        ("protein-carb", p, c),
-    ]
-    for name, primary, secondary in pairs:
-        if primary > 40 and secondary > 25:
-            tags.append(name)
-            return tags
+    if protein_kcal > 0.40 * kcal and carb_kcal > 0.25 * kcal:
+        return "prot-carb"
 
-    tags.append("balanced")
-    return tags
+    if fat_kcal > 0.40 * kcal and protein_kcal > 0.25 * kcal:
+        return "fat-prot"
+
+    if fat_kcal > 0.40 * kcal and carb_kcal > 0.25 * kcal:
+        return "fat-carb"
+
+    if carb_kcal > 0.40 * kcal and protein_kcal > 0.25 * kcal:
+        return "carb-prot"
+
+    if carb_kcal > 0.40 * kcal and fat_kcal > 0.25 * kcal:
+        return "carb-fat"
+
+    return "balanced"
 
 
-def compute_properties(kcal, protein_g, fat_g, carb_g):
+def compute_properties(kcal, protein_g, fat_g, carb_g, fiber_g):
+
     props = []
 
     if protein_g > 15:
-        props.append("hi-proteine")
-    if protein_g < 5:
-        props.append("low-proteine")
-
+        props.append("hi-prot")
     if fat_g > 15:
         props.append("hi-fat")
-    if fat_g < 3:
-        props.append("low-fat")
-
     if carb_g > 40:
         props.append("hi-carb")
-    if carb_g < 5:
-        props.append("low-carb")
-
-    if kcal < 100:
-        props.append("low-cal")
     if kcal > 200:
         props.append("hi-cal")
+
+    if protein_g < 5:
+        props.append("low-prot")
+    if fat_g < 3:
+        props.append("low-fat")
+    if carb_g < 5:
+        props.append("low-carb")
+    if kcal < 100:
+        props.append("low-cal")
+    if fiber_g > 5:
+        props.append("fiber")
 
     return props
 
 
 class Command(BaseCommand):
-    help = "Compute denormalized tags/properties for products based on ProductNutrient amounts per 100g."
+    help = "Compute tags and property tags for products based on ProductNutrient amounts per 100g."
 
     def add_arguments(self, parser):
         parser.add_argument("--limit", type=int, default=None)
         parser.add_argument("--dry-run", action="store_true")
-        parser.add_argument("--only-missing", action="store_true", help="Update only products with empty tags/properties")
+        parser.add_argument(
+            "--only-missing",
+            action="store_true",
+            help="Update only products with empty tags/properties",
+        )
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -102,6 +106,7 @@ class Command(BaseCommand):
         only_missing = options["only_missing"]
 
         qs = Product.objects.all().order_by("id")
+
         if only_missing:
             qs = qs.filter(tags=[], properties=[])
 
@@ -117,10 +122,18 @@ class Command(BaseCommand):
                 .select_related("nutrient")
             )
 
-            values = {"kcal": 0.0, "protein": 0.0, "fat": 0.0, "carb": 0.0}
+            values = {
+                "kcal": 0.0,
+                "protein": 0.0,
+                "fat": 0.0,
+                "carb": 0.0,
+                "fiber": 0.0,
+            }
+
             for row in pn:
                 usda_id = row.nutrient.usda_nutrient_id
                 amount = safe_float(row.amount_per_100g)
+
                 if usda_id == USDA_IDS["kcal"]:
                     values["kcal"] = amount
                 elif usda_id == USDA_IDS["protein"]:
@@ -129,15 +142,31 @@ class Command(BaseCommand):
                     values["fat"] = amount
                 elif usda_id == USDA_IDS["carb"]:
                     values["carb"] = amount
+                elif usda_id == USDA_IDS["fiber"]:
+                    values["fiber"] = amount
 
-            tags = compute_tags(values["kcal"], values["protein"], values["fat"], values["carb"])
-            props = compute_properties(values["kcal"], values["protein"], values["fat"], values["carb"])
+            tag = compute_tag(
+                values["kcal"],
+                values["protein"],
+                values["fat"],values["carb"],
+            )
+
+            props = compute_properties(
+                values["kcal"],
+                values["protein"],
+                values["fat"],
+                values["carb"],
+                values["fiber"],
+            )
 
             if dry_run:
-                self.stdout.write(f"[DRY] Product #{product.id} {product.name}: tags={tags} props={props}")
+                self.stdout.write(
+                    f"[DRY] Product #{product.id} {product.name}: "
+                    f"tag={tag} props={props}"
+                )
                 continue
 
-            product.tags = tags
+            product.tags = [tag]
             product.properties = props
             product.save(update_fields=["tags", "properties"])
             updated += 1

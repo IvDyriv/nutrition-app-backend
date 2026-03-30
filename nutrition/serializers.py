@@ -9,16 +9,16 @@ def get_product_macros_data(product):
     carbs = 0
 
     for item in product.product_nutrients.all():
-        nutrient_name = item.nutrient.name.lower()
+        nutrient_id = item.nutrient.usda_nutrient_id
         amount = item.amount_per_100g or 0
 
-        if "energy" in nutrient_name or "calorie" in nutrient_name:
+        if nutrient_id == 1008:
             kcal = int(round(amount))
-        elif "protein" in nutrient_name:
+        elif nutrient_id == 1003:
             protein = int(round(amount))
-        elif "total lipid" in nutrient_name or nutrient_name == "fat" or "fat" in nutrient_name:
+        elif nutrient_id == 1004:
             fat = int(round(amount))
-        elif "carbohydrate" in nutrient_name or "carb" in nutrient_name:
+        elif nutrient_id == 1005:
             carbs = int(round(amount))
 
     return {
@@ -61,6 +61,47 @@ class ProductListSerializer(serializers.ModelSerializer):
     def get_macros(self, obj):
         return get_product_macros_data(obj)
 
+class ProductListQuerySerializer(serializers.Serializer):
+    TAG_CHOICES = [
+        "lo_cal",
+        "prot",
+        "fat",
+        "carb",
+        "prot-fat",
+        "prot-carb",
+        "fat-carb",
+        "fat-prot",
+        "carb-prot",
+        "carb-fat",
+        "balanced",
+    ]
+
+    PROP_CHOICES = [
+        "hi-prot",
+        "hi-fat",
+        "hi-carb",
+        "hi-cal",
+        "low-prot",
+        "low-fat",
+        "low-carb",
+        "low-cal",
+        "fiber",
+    ]
+
+    search = serializers.CharField(required=False, max_length=40)
+    page = serializers.IntegerField(required=False, min_value=1)
+    tag = serializers.ChoiceField(required=False, choices=TAG_CHOICES)
+    prop = serializers.ListField(
+        child=serializers.ChoiceField(choices=PROP_CHOICES),
+        required=False,
+    )
+
+    def validate_search(self, value):
+        cleaned = value.replace(" ", "").replace("-", "")
+        if not cleaned.isalnum():
+            raise serializers.ValidationError("Invalid search value.")
+        return value
+
 
 
 class ProductDetailSerializer(serializers.ModelSerializer):
@@ -82,6 +123,25 @@ class ProductDetailSerializer(serializers.ModelSerializer):
 
     def get_macros(self, obj):
         return get_product_macros_data(obj)
+
+
+class ProductSummaryItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    cal = serializers.IntegerField()
+    prot = serializers.IntegerField()
+    fat = serializers.IntegerField()
+    carb = serializers.IntegerField()
+    tag = serializers.CharField(allow_null=True)
+    properties = serializers.ListField(
+        child=serializers.CharField(),
+        allow_empty=True,
+    )
+
+
+class ProductSummaryResponseSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    items = ProductSummaryItemSerializer(many=True)
 
 
 

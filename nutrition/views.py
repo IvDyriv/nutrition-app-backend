@@ -1,9 +1,11 @@
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from django.shortcuts import render
 from rest_framework import generics
 from .filters import WholeWordSearchFilter
 from .models import Product, Nutrient, ProductNutrient, NutrientNorm, UserProfile, UserPreferences, MealLog, MealLogItem
-from .serializers import ProductListSerializer, ProductDetailSerializer, NormsResponseSerializer, ProductTagsSerializer
+from .serializers import ProductListSerializer, ProductDetailSerializer, NormsResponseSerializer, ProductTagsSerializer, \
+    ProductListQuerySerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -29,90 +31,154 @@ from nutrition.services.meal_analysis import analyze_meal
 from nutrition.services.norm_comparison import compare_meal_with_norms
 
 
+from django.core.paginator import Paginator, EmptyPage
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from rest_framework import generics
+from rest_framework.response import Response
+
+from .models import Product
+from .serializers import ProductSummaryResponseSerializer
+from .filters import WholeWordSearchFilter
+from .serializers import get_product_macros_data
+
+
 @extend_schema(
-    summary="Products catalog",
-    description="Returns paginated list of products. Supports search by name.",
+    summary="List products (summary)",
+    description="Returns products summary list.",
     parameters=[
         OpenApiParameter(
             name="search",
             type=str,
             location=OpenApiParameter.QUERY,
             required=False,
-            description="Search by product name"
+            description="limit symbol amount 40 symbols MAX. Exclude special symbols",
         ),
-
         OpenApiParameter(
             name="page",
             type=int,
             location=OpenApiParameter.QUERY,
             required=False,
-            description="Page number"
+            description="Page number",
         ),
-
         OpenApiParameter(
             name="tag",
             type=str,
             location=OpenApiParameter.QUERY,
             required=False,
+            enum=[
+                "lo_cal",
+                "prot",
+                "fat",
+                "carb",
+                "prot-fat",
+                "prot-carb",
+                "fat-carb",
+                "fat-prot",
+                "carb-prot",
+                "carb-fat",
+                "balanced",
+            ],
+            description="Single main tag per product",
+        ),
+        OpenApiParameter(
+            name="prop",
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
             many=True,
-            description="Filter by tags (AND). Example: ?tag=low_cal&tag=carb"
-        ),
-
-        OpenApiParameter(
-            name="tag_any",
-            type=str,
-            location=OpenApiParameter.QUERY,
-            required=False,
-            description="Filter by tags (OR). Example: ?tag_any=low_cal,carb"
-        ),
-
-        OpenApiParameter(
-            name="property",
-            type=str,
-            location=OpenApiParameter.QUERY,
-            required=False,
-            many=True,
-            description="Filter by properties (AND). Example: ?property=hi-fat&property=hi-cal"
-        ),
-
-        OpenApiParameter(
-            name="property_any",
-            type=str,
-            location=OpenApiParameter.QUERY,
-            required=False,
-            description="Filter by properties (OR). Example: ?property_any=hi-fat,hi-cal"
+            enum=[
+                "hi-prot",
+                "hi-fat",
+                "hi-carb",
+                "hi-cal",
+                "low-prot",
+                "low-fat",
+                "low-carb",
+                "low-cal",
+                "fiber",
+            ],
+            description="Multiple property tags per product",
         ),
     ],
-    responses=ProductListSerializer(many=True),
+    responses={200: ProductSummaryResponseSerializer},
 )
-class ProductListView(generics.ListAPIView):
-    serializer_class = ProductListSerializer
+class ProductListView(generics.GenericAPIView):
     filter_backends = [WholeWordSearchFilter]
     search_fields = ["name"]
 
     def get_queryset(self):
         qs = Product.objects.all().prefetch_related(
-            "product_nutrients__nutrient").order_by("id")
+            "product_nutrients__nutrient"
+        ).order_by("id")
 
-        tags = self.request.query_params.getlist("tag")
-        if tags:
-            qs = qs.filter(tags__contains=tags)
+        tag = self.request.query_params.get("tag")
+        if tag:
+            qs = qs.filter(tags__contains=[tag])
 
-        tag_any = self.request.query_params.get("tag_any")
-        if tag_any:
-            tag_list = tag_any.split(",")
-            qs = qs.filter(tags__overlap=tag_list)
-
-        props = self.request.query_params.getlist("property")
+        props = self.request.query_params.getlist("prop")
         if props:
-            qs = qs.filter(properties__contains=props)
-
-        prop_any = self.request.query_params.get("property_any")
-        if prop_any:
-            prop_list = prop_any.split(",")
-            qs = qs.filter(properties__overlap=prop_list)
+            qs = qs.filter(properties__overlap=props)
 
         return qs
+
+    def filter_queryset(self, queryset):
+        for backend in list(self.filter_backends):
+            queryset = backend().filter_queryset(self.request, queryset, self)
+        return queryset
+
+    def get(self, request, *args, **kwargs):
+        query_data = {}
+
+        search = request.query_params.get("search")
+        if search not in (None, ""):
+            query_data["search"] = search
+
+        page = request.query_params.get("page")
+        if page not in (None, ""):
+            query_data["page"] = page
+
+        tag = request.query_params.get("tag")
+        if tag not in (None, ""):
+            query_data["tag"] = tag
+
+        props = request.query_params.getlist("prop")
+        if props:
+            query_data["prop"] = props
+
+        query_serializer = ProductListQuerySerializer(data=query_data)
+
+        if not query_serializer.is_valid():
+            return Response({"detail": "Invalid parameters."}, status=400)
+
+        qs = self.filter_queryset(self.get_queryset())
+
+        paginator = Paginator(qs, 10)
+        page_number = query_serializer.validated_data.get("page", 1)
+
+        try:
+            page_obj = paginator.page(page_number)
+        except EmptyPage:
+            return Response({"detail": "Invalid parameters."}, status=400)
+
+        items = []
+        for product in page_obj.object_list:
+            macros = get_product_macros_data(product)
+
+            items.append({
+                "id": product.id,
+                "name": product.name,
+                "cal": int(round(macros.get("kcal", 0))),
+                "prot": int(round(macros.get("protein", 0))),
+                "fat": int(round(macros.get("fat", 0))),
+                "carb": int(round(macros.get("carbs", 0))),
+                "tag": product.tags[0] if product.tags else None,
+                "properties": product.properties or [],
+            })
+
+        return Response({
+            "count": paginator.count,
+            "items": items,
+        })
 
 @extend_schema(
     summary="Product detail",
@@ -309,4 +375,82 @@ def product_tags(request):
         "properties": sorted(properties),
     })
 
+
+@extend_schema(
+    summary="Receive an array of Full products",
+    request={
+        "application/json": {
+            "type": "array",
+            "items": {"type": "integer"},
+            "example": [1, 2, 3],
+        }
+    },
+    responses={200: OpenApiTypes.OBJECT},
+)
+class ProductBatchView(APIView):
+
+    def post(self, request):
+        ids = request.data
+
+        # ❌ валідація
+        if not isinstance(ids, list):
+            return Response({"detail": "Invalid parameters."}, status=400)
+
+        if len(ids) > 40:
+            return Response({"detail": "Too many items (max 40)."}, status=400)
+
+        if not all(isinstance(i, int) for i in ids):
+            return Response({"detail": "Invalid parameters."}, status=400)
+
+        products = {
+            p.id: p
+            for p in Product.objects.filter(id__in=ids).prefetch_related(
+                "product_nutrients__nutrient"
+            )
+        }
+
+        result = []
+
+        for pid in ids:
+            product = products.get(pid)
+
+            if not product:
+                result.append({
+                    "item": None,
+                    "micro": []
+                })
+                continue
+
+            macros = get_product_macros_data(product)
+
+            # micro nutrients
+            micro = []
+            for pn in product.product_nutrients.all():
+                nutrient = pn.nutrient
+
+                # пропускаємо макро
+                if nutrient.usda_nutrient_id in [1008, 1003, 1004, 1005]:
+                    continue
+
+                micro.append({
+                    "name": nutrient.name,
+                    "unit": nutrient.unit,
+                    "amount": pn.amount_per_100g or 0,
+                })
+
+            result.append({
+                "item": {
+                    "id": product.id,
+                    "name": product.name,
+                    "cal": macros["kcal"],
+                    "prot": macros["protein"],
+                    "fat": macros["fat"],
+                    "carb": macros["carbs"],
+                    "tag": product.tags[0] if product.tags else None,
+                    "properties": product.properties or [],
+                },
+                "micro": micro
+            })
+
+        return Response(result)
 
