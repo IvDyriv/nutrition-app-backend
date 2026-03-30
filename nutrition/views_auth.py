@@ -144,11 +144,20 @@ class VerifyEmailView(APIView):
     request=ChangePasswordSerializer,
     responses={200: None},
 )
+@extend_schema(
+    summary="Change password",
+    description="Changes password of authenticated user.",
+    request=ChangePasswordSerializer,
+    responses={200: None},
+)
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        serializer = ChangePasswordSerializer(data=request.data)
+        serializer = ChangePasswordSerializer(
+            data=request.data,
+            context={"request": request},
+        )
         serializer.is_valid(raise_exception=True)
 
         user = request.user
@@ -160,8 +169,6 @@ class ChangePasswordView(APIView):
                 {"old_password": ["Old password is incorrect."]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        validate_password(new_password, user=user)
 
         user.set_password(new_password)
         user.save()
@@ -216,6 +223,12 @@ class PasswordResetRequestView(APIView):
     request=PasswordResetConfirmSerializer,
     responses={200: None},
 )
+@extend_schema(
+    summary="Confirm password reset",
+    description="Resets password using reset token.",
+    request=PasswordResetConfirmSerializer,
+    responses={200: None},
+)
 class PasswordResetConfirmView(APIView):
     permission_classes = [AllowAny]
 
@@ -226,7 +239,12 @@ class PasswordResetConfirmView(APIView):
         token = serializer.validated_data["token"]
         new_password = serializer.validated_data["new_password"]
 
-        profile = UserProfile.objects.filter(password_reset_token=token).select_related("user").first()
+        profile = (
+            UserProfile.objects
+            .filter(password_reset_token=token)
+            .select_related("user")
+            .first()
+        )
 
         if not profile:
             return Response(
@@ -234,15 +252,13 @@ class PasswordResetConfirmView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        validate_password(new_password, user=profile.user)
-
         user = profile.user
         user.set_password(new_password)
         user.save()
 
         profile.password_reset_token = None
         profile.password_reset_requested_at = None
-        profile.save()
+        profile.save(update_fields=["password_reset_token", "password_reset_requested_at"])
 
         return Response(
             {"detail": "Password has been reset successfully."},

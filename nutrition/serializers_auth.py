@@ -1,12 +1,20 @@
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 
+def run_password_validation(password, user=None):
+    try:
+        validate_password(password, user=user)
+    except DjangoValidationError as e:
+        raise serializers.ValidationError(list(e.messages))
+
+
 class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True)
-    password_confirm = serializers.CharField(write_only=True, required=True)
+    password = serializers.CharField(write_only=True, required=True, trim_whitespace=False,)
+    password_confirm = serializers.CharField(write_only=True, required=True, trim_whitespace=False,)
 
     class Meta:
         model = User
@@ -28,7 +36,12 @@ class RegisterSerializer(serializers.ModelSerializer):
                 {"password_confirm": "Passwords do not match."}
             )
 
-        validate_password(attrs["password"])
+        user = User(
+            username=attrs.get("username"),
+            email=attrs.get("email"),
+        )
+        run_password_validation(attrs["password"], user=user)
+
         return attrs
 
     def create(self, validated_data):
@@ -45,7 +58,6 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ("id", "username", "email", "date_joined")
-
 
 
 class LogoutSerializer(serializers.Serializer):
@@ -67,15 +79,20 @@ class LoginSerializer(TokenObtainPairSerializer):
 
 
 class ChangePasswordSerializer(serializers.Serializer):
-    old_password = serializers.CharField(write_only=True)
-    new_password = serializers.CharField(write_only=True)
-    new_password_confirm = serializers.CharField(write_only=True)
+    old_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_password_confirm = serializers.CharField(write_only=True, trim_whitespace=False)
 
     def validate(self, attrs):
         if attrs["new_password"] != attrs["new_password_confirm"]:
             raise serializers.ValidationError(
                 {"new_password_confirm": "Passwords do not match."}
             )
+
+        request = self.context.get("request")
+        user = request.user if request else None
+        run_password_validation(attrs["new_password"], user=user)
+
         return attrs
 
 
@@ -84,13 +101,16 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
-    token = serializers.CharField()
-    new_password = serializers.CharField(write_only=True)
-    new_password_confirm = serializers.CharField(write_only=True)
+    token = serializers.CharField(trim_whitespace=False)
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_password_confirm = serializers.CharField(write_only=True, trim_whitespace=False)
 
     def validate(self, attrs):
         if attrs["new_password"] != attrs["new_password_confirm"]:
             raise serializers.ValidationError(
                 {"new_password_confirm": "Passwords do not match."}
             )
+
+        run_password_validation(attrs["new_password"])
+
         return attrs
