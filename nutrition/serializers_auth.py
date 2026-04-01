@@ -13,15 +13,27 @@ def run_password_validation(password, user=None):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True, trim_whitespace=False,)
-    password_confirm = serializers.CharField(write_only=True, required=True, trim_whitespace=False,)
+    username = serializers.CharField(min_length=3, max_length=150, required=True)
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(
+        write_only=True,
+        required=True,
+        trim_whitespace=False,
+    )
+    password_confirm = serializers.CharField(
+        write_only=True,
+        required=True,
+        trim_whitespace=False,
+    )
 
     class Meta:
         model = User
         fields = ("id", "username", "email", "password", "password_confirm")
 
     def validate_email(self, value):
-        if value and User.objects.filter(email=value).exists():
+        value = value.lower()
+
+        if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("User with this email already exists.")
         return value
 
@@ -61,7 +73,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class LogoutSerializer(serializers.Serializer):
-    refresh = serializers.CharField()
+    refresh = serializers.CharField(trim_whitespace=False)
 
 
 class LoginSerializer(TokenObtainPairSerializer):
@@ -97,7 +109,10 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    email = serializers.EmailField(required=True)
+
+    def validate_email(self, value):
+        return value.lower()
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
