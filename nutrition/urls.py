@@ -16,5 +16,5 @@ urlpatterns = [
     path("nutrition/compare-with-norms/", CompareMealWithNormsView.as_view(), name="compare-with-norms"),
     path("status/", project_status_view, name="project-status"),
     path("products/tags/", product_tags, name="product-tags"),
-    path("product/batch/", ProductBatchView.as_view(), name="product-batch"),
+    path("products/batch/", ProductBatchView.as_view(), name="product-batch"),
 ]

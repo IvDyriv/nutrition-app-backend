@@ -265,3 +265,31 @@ class ProductMacrosSerializer(serializers.Serializer):
     protein = serializers.IntegerField()
     fat = serializers.IntegerField()
     carbs = serializers.IntegerField()
+
+
+from rest_framework import serializers
+
+
+class ProductItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    cal = serializers.IntegerField()
+    prot = serializers.IntegerField()
+    fat = serializers.IntegerField()
+    carb = serializers.IntegerField()
+    tag = serializers.CharField(allow_null=True)
+    properties = serializers.ListField(
+        child=serializers.CharField(),
+        default=list,
+    )
+
+
+class ProductMicroSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    unit = serializers.CharField()
+    amount = serializers.IntegerField()
+
+
+class ProductBatchDetailResponseSerializer(serializers.Serializer):
+    item = ProductItemSerializer(allow_null=True)
+    micro = ProductMicroSerializer(many=True)

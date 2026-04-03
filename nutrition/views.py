@@ -1,11 +1,11 @@
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from rest_framework import generics
 from .filters import WholeWordSearchFilter
 from .models import Product, Nutrient, ProductNutrient, NutrientNorm, UserProfile, UserPreferences, MealLog, MealLogItem
 from .serializers import ProductListSerializer, ProductDetailSerializer, NormsResponseSerializer, ProductTagsSerializer, \
-    ProductListQuerySerializer
+    ProductListQuerySerializer, ProductBatchDetailResponseSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -126,6 +126,7 @@ class ProductListView(generics.GenericAPIView):
             queryset = backend().filter_queryset(self.request, queryset, self)
         return queryset
 
+    @extend_schema(operation_id="products_list",)
     def get(self, request, *args, **kwargs):
         query_data = {}
 
@@ -180,14 +181,55 @@ class ProductListView(generics.GenericAPIView):
             "items": items,
         })
 
+
+def build_product_response(product):
+    macros = get_product_macros_data(product)
+
+    micro = []
+
+    for pn in product.product_nutrients.all():
+        nutrient = pn.nutrient
+
+        if nutrient.usda_nutrient_id in [1008, 1003, 1004, 1005]:
+            continue
+
+        amount = pn.amount_per_100g or 0
+
+        micro.append({
+            "name": nutrient.name,
+            "unit": nutrient.unit,
+            "amount": int(round(float(amount))),
+        })
+
+    return {
+        "item": {
+            "id": product.id,
+            "name": product.name,
+            "cal": int(round(macros.get("kcal", 0))),
+            "prot": int(round(macros.get("protein", 0))),
+            "fat": int(round(macros.get("fat", 0))),
+            "carb": int(round(macros.get("carbs", 0))),
+            "tag": product.tags[0] if product.tags else None,
+            "properties": product.properties or [],
+        },
+        "micro": micro,
+    }
+
+
 @extend_schema(
     summary="Product detail",
-    description="Returns product with full nutrient composition per 100g.",
-    responses=ProductDetailSerializer,
+    description="Returns full product in frontend-friendly format.",
+    responses={200: ProductBatchDetailResponseSerializer},
 )
-class ProductDetailView(generics.RetrieveAPIView):
-    queryset = Product.objects.filter(is_active=True).prefetch_related("product_nutrients__nutrient").order_by("id")
-    serializer_class = ProductDetailSerializer
+class ProductDetailView(APIView):
+    @extend_schema(operation_id = "product_detail")
+    def get(self, request, pk, *args, **kwargs):
+        product = get_object_or_404(
+            Product.objects.prefetch_related("product_nutrients__nutrient"),
+            pk=pk,
+            is_active=True,
+        )
+        return Response(build_product_response(product))
 
 
 @extend_schema(
@@ -387,70 +429,54 @@ def product_tags(request):
     },
     responses={200: OpenApiTypes.OBJECT},
 )
-class ProductBatchView(APIView):
 
-    def post(self, request):
+
+@extend_schema(
+    summary="Receive an array of Full products",
+    request=OpenApiTypes.OBJECT,
+    responses={200: ProductBatchDetailResponseSerializer(many=True)},
+)
+class ProductBatchView(APIView):
+    def post(self, request, *args, **kwargs):
         ids = request.data
 
-        # ❌ валідація
         if not isinstance(ids, list):
-            return Response({"detail": "Invalid parameters."}, status=400)
+            return Response(
+                {"detail": "Invalid payload. Expected a list of product IDs."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if len(ids) > 40:
-            return Response({"detail": "Too many items (max 40)."}, status=400)
+            return Response(
+                {"detail": "Too many items (max 40)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if not all(isinstance(i, int) for i in ids):
-            return Response({"detail": "Invalid parameters."}, status=400)
-
-        products = {
-            p.id: p
-            for p in Product.objects.filter(id__in=ids).prefetch_related(
-                "product_nutrients__nutrient"
+            return Response(
+                {"detail": "All product IDs must be integers."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        }
+
+        products = (
+            Product.objects
+            .filter(id__in=ids, is_active=True)
+            .prefetch_related("product_nutrients__nutrient")
+        )
+        products_map = {product.id: product for product in products}
 
         result = []
-
-        for pid in ids:
-            product = products.get(pid)
+        for product_id in ids:
+            product = products_map.get(product_id)
 
             if not product:
                 result.append({
                     "item": None,
-                    "micro": []
+                    "micro": [],
                 })
                 continue
 
-            macros = get_product_macros_data(product)
+            result.append(build_product_response(product))
 
-            # micro nutrients
-            micro = []
-            for pn in product.product_nutrients.all():
-                nutrient = pn.nutrient
-
-                # пропускаємо макро
-                if nutrient.usda_nutrient_id in [1008, 1003, 1004, 1005]:
-                    continue
-
-                micro.append({
-                    "name": nutrient.name,
-                    "unit": nutrient.unit,
-                    "amount": pn.amount_per_100g or 0,
-                })
-
-            result.append({
-                "item": {
-                    "id": product.id,
-                    "name": product.name,
-                    "cal": macros["kcal"],
-                    "prot": macros["protein"],
-                    "fat": macros["fat"],
-                    "carb": macros["carbs"],
-                    "tag": product.tags[0] if product.tags else None,
-                    "properties": product.properties or [],
-                },
-                "micro": micro
-            })
-
-        return Response(result)
+        return Response(result, status=status.HTTP_200_OK)
 
