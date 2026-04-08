@@ -5,7 +5,7 @@ from rest_framework import generics
 from .filters import WholeWordSearchFilter
 from .models import Product, Nutrient, ProductNutrient, NutrientNorm, UserProfile, UserPreferences, MealLog, MealLogItem
 from .serializers import ProductListSerializer, ProductDetailSerializer, NormsResponseSerializer, ProductTagsSerializer, \
-    ProductListQuerySerializer, ProductBatchDetailResponseSerializer
+    ProductListQuerySerializer, ProductBatchDetailResponseSerializer, ProductBatchRequestSerializer
 from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.decorators import api_view
@@ -430,42 +430,27 @@ def product_tags(request):
 
 
 @extend_schema(
-    summary="Receive an array of Full products",
-    request={
-        "application/json": {
-            "type": "array",
-            "items": {"type": "integer"},
-            "example": [1, 2, 3],
-        }
-    },
-    responses={200: OpenApiTypes.OBJECT},
-)
-
-
-@extend_schema(
-    summary="Receive an array of Full products",
-    request=OpenApiTypes.OBJECT,
+    operation_id="products_batch",
+    summary="Receive full products by ids",
+    description="Accepts only POST with JSON body {'ids': [1, 2, 3]} and returns full products with micronutrients.",
+    request=ProductBatchRequestSerializer,
     responses={200: ProductBatchDetailResponseSerializer(many=True)},
 )
 class ProductBatchView(APIView):
     def post(self, request, *args, **kwargs):
-        ids = request.data
+        serializer = ProductBatchRequestSerializer(data=request.data)
 
-        if not isinstance(ids, list):
+        if not serializer.is_valid():
             return Response(
-                {"detail": "Invalid payload. Expected a list of product IDs."},
+                {"detail": "Invalid parameters."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        ids = serializer.validated_data["ids"]
 
         if len(ids) > 40:
             return Response(
                 {"detail": "Too many items (max 40)."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not all(isinstance(i, int) for i in ids):
-            return Response(
-                {"detail": "All product IDs must be integers."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -474,20 +459,17 @@ class ProductBatchView(APIView):
             .filter(id__in=ids, is_active=True)
             .prefetch_related("product_nutrients__nutrient")
         )
+
         products_map = {product.id: product for product in products}
 
-        result = []
-        for product_id in ids:
-            product = products_map.get(product_id)
+        missing_ids = [product_id for product_id in ids if product_id not in products_map]
+        if missing_ids:
+            return Response(
+                {"detail": "One or more products not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-            if not product:
-                result.append({
-                    "item": None,
-                    "micro": [],
-                })
-                continue
-
-            result.append(build_product_response(product))
+        result = [build_product_response(products_map[product_id]) for product_id in ids]
 
         return Response(result, status=status.HTTP_200_OK)
 

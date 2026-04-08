@@ -293,3 +293,10 @@ class ProductMicroSerializer(serializers.Serializer):
 class ProductBatchDetailResponseSerializer(serializers.Serializer):
     item = ProductItemSerializer(allow_null=True)
     micro = ProductMicroSerializer(many=True)
+
+
+class ProductBatchRequestSerializer(serializers.Serializer):
+    ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+    )
