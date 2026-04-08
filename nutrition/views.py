@@ -7,7 +7,6 @@ from .models import Product, Nutrient, ProductNutrient, NutrientNorm, UserProfil
 from .serializers import ProductListSerializer, ProductDetailSerializer, NormsResponseSerializer, ProductTagsSerializer, \
     ProductListQuerySerializer, ProductBatchDetailResponseSerializer
 from rest_framework.views import APIView
-from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.decorators import api_view
 from nutrition.serializers import (
@@ -128,6 +127,12 @@ class ProductListView(generics.GenericAPIView):
 
     @extend_schema(operation_id="products_list",)
     def get(self, request, *args, **kwargs):
+        if request.body:
+            return Response(
+                {"detail": "Invalid parameters."},
+                status=status.HTTP_400_BAD_REQUEST,
+
+            )
         query_data = {}
 
         search = request.query_params.get("search")
@@ -222,8 +227,14 @@ def build_product_response(product):
     responses={200: ProductBatchDetailResponseSerializer},
 )
 class ProductDetailView(APIView):
-    @extend_schema(operation_id = "product_detail")
+    @extend_schema(operation_id="product_detail")
     def get(self, request, pk, *args, **kwargs):
+        if request.body:
+            return Response(
+                {"detail": "Invalid parameters."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         product = get_object_or_404(
             Product.objects.prefetch_related("product_nutrients__nutrient"),
             pk=pk,
