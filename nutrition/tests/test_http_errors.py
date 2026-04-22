@@ -115,3 +115,102 @@ class TestMethodsNotAllowed(APITestCase):
         )
 
         self.assertEqual(response.status_code, 405)
+
+class TestWrongParamsOrBody(APITestCase):
+    """
+    We test that existing endpoints with correct HTTP method
+    return 400 when given invalid query parameters or unexpected request body
+    """
+    def setUp(self):
+        self.product = Product.objects.create(name="TestName")
+
+    def test_list_long_search_params(self):
+        search = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" # > 40
+        data = {
+            "search": search
+        }
+        response = self.client.get(
+            LIST_PRODUCTS_URL,
+            data=data
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_list_not_valid_search_params(self):
+        search = "test@$12"
+        data = {
+            "search": search
+        }
+        response = self.client.get(
+            LIST_PRODUCTS_URL,
+            data=data
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_list_not_valid_page_params(self):
+        data = {
+            "page": "test"
+        }
+        response = self.client.get(
+            LIST_PRODUCTS_URL,
+            data=data
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_list_min_page_params(self):
+        data = {
+            "page": 0
+        }
+        response = self.client.get(
+            LIST_PRODUCTS_URL,
+            data=data
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_list_page_out_of_range(self):
+        data = {
+            "page": 999,
+        }
+        response = self.client.get(
+            LIST_PRODUCTS_URL,
+            data=data
+        )
+        self.assertEqual(response.status_code, 400)
+
+
+    def test_list_not_valid_tag_params(self):
+        data = {
+            "tag": "Test"
+        }
+        response = self.client.get(
+            LIST_PRODUCTS_URL,
+            data=data
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_list_not_valid_prop_params(self):
+        data = {
+            "prop": "Test"
+        }
+        response = self.client.get(
+            LIST_PRODUCTS_URL,
+            data=data
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_list_with_body(self):
+        response = self.client.generic(
+            method="GET",
+            path=LIST_PRODUCTS_URL,
+            data="Test",
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_detailed_with_body(self):
+        response = self.client.generic(
+            method="GET",
+            path=DETAILED_PRODUCTS_URL.format(product_id=self.product.id),
+            data="Test",
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
