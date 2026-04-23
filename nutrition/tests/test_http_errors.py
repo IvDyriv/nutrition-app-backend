@@ -1,10 +1,6 @@
 from rest_framework.test import APITestCase
-
 from nutrition.models import Product
-
-NOT_EXISTING_URL = "/api/v1/notexist/"
-LIST_PRODUCTS_URL = "/api/v1/products/"
-DETAILED_PRODUCTS_URL = "/api/v1/products/{product_id}/"
+from nutrition.tests.constants import NOT_EXISTING_URL, DETAILED_PRODUCTS_URL, LIST_PRODUCTS_URL
 
 
 class TestEndpointNotExist(APITestCase):
@@ -133,6 +129,7 @@ class TestWrongParamsOrBody(APITestCase):
             LIST_PRODUCTS_URL,
             data=data
         )
+
         self.assertEqual(response.status_code, 400)
 
     def test_list_not_valid_search_params(self):
@@ -144,6 +141,7 @@ class TestWrongParamsOrBody(APITestCase):
             LIST_PRODUCTS_URL,
             data=data
         )
+
         self.assertEqual(response.status_code, 400)
 
     def test_list_not_valid_page_params(self):
@@ -154,6 +152,7 @@ class TestWrongParamsOrBody(APITestCase):
             LIST_PRODUCTS_URL,
             data=data
         )
+
         self.assertEqual(response.status_code, 400)
 
     def test_list_min_page_params(self):
@@ -164,6 +163,7 @@ class TestWrongParamsOrBody(APITestCase):
             LIST_PRODUCTS_URL,
             data=data
         )
+
         self.assertEqual(response.status_code, 400)
 
     def test_list_page_out_of_range(self):
@@ -174,6 +174,7 @@ class TestWrongParamsOrBody(APITestCase):
             LIST_PRODUCTS_URL,
             data=data
         )
+
         self.assertEqual(response.status_code, 400)
 
 
@@ -185,6 +186,7 @@ class TestWrongParamsOrBody(APITestCase):
             LIST_PRODUCTS_URL,
             data=data
         )
+
         self.assertEqual(response.status_code, 400)
 
     def test_list_not_valid_prop_params(self):
@@ -195,6 +197,7 @@ class TestWrongParamsOrBody(APITestCase):
             LIST_PRODUCTS_URL,
             data=data
         )
+
         self.assertEqual(response.status_code, 400)
 
     def test_list_with_body(self):
@@ -204,6 +207,7 @@ class TestWrongParamsOrBody(APITestCase):
             data="Test",
             content_type="application/json"
         )
+
         self.assertEqual(response.status_code, 400)
 
     def test_detailed_with_body(self):
@@ -213,4 +217,5 @@ class TestWrongParamsOrBody(APITestCase):
             data="Test",
             content_type="application/json"
         )
+
         self.assertEqual(response.status_code, 400)
