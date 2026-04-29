@@ -1,15 +1,53 @@
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Final
 
 from nutrition.models import NutrientNorm
 
 
-MAFFLIN_SUFFIX = {
+DEFAULT_DECIMAL_PLACES: Final[str] = "0.01"
+
+BMR_WEIGHT_COEFFICIENT: Final[Decimal] = Decimal("10")
+BMR_HEIGHT_COEFFICIENT: Final[Decimal] = Decimal("6.25")
+BMR_AGE_COEFFICIENT: Final[Decimal] = Decimal("5")
+
+KATCH_BASE_VALUE: Final[Decimal] = Decimal("370")
+KATCH_LEAN_MASS_COEFFICIENT: Final[Decimal] = Decimal("21.6")
+
+PERCENT: Final[Decimal] = Decimal("100")
+BMI_OBESITY_THRESHOLD: Final[Decimal] = Decimal("30")
+
+CALORIES_PER_GRAM_PROTEIN: Final[Decimal] = Decimal("4")
+CALORIES_PER_GRAM_CARBS: Final[Decimal] = Decimal("4")
+CALORIES_PER_GRAM_FAT: Final[Decimal] = Decimal("9")
+
+GOAL_CALORIE_ADJUSTMENT: Final[dict[str, Decimal]] = {
+    "cut": Decimal("-300"),
+    "maintenance": Decimal("0"),
+    "bulk": Decimal("300"),
+}
+
+GOAL_MACRO_RATIOS: Final[dict[str, dict[str, Decimal]]] = {
+    "cut": {
+        "protein": Decimal("0.30"),
+        "fat": Decimal("0.25"),
+    },
+    "maintenance": {
+        "protein": Decimal("0.25"),
+        "fat": Decimal("0.25"),
+    },
+    "bulk": {
+        "protein": Decimal("0.25"),
+        "fat": Decimal("0.25"),
+    },
+}
+
+MIFFLIN_SEX_SUFFIX: Final[dict[str, Decimal]] = {
     "male": Decimal("5"),
     "female": Decimal("-161"),
     "na": Decimal("-78"),
 }
 
-ACTIVITY_MULTIPLIERS = {
+ACTIVITY_MULTIPLIERS: Final[dict[str, Decimal]] = {
     "static": Decimal("1.2"),
     "mild": Decimal("1.375"),
     "moderate": Decimal("1.55"),
@@ -17,80 +55,119 @@ ACTIVITY_MULTIPLIERS = {
     "exhausting": Decimal("1.9"),
 }
 
-ATHLETE_THRESHOLDS = {
+ATHLETE_THRESHOLDS: Final[dict[str, dict[str, Decimal]]] = {
     "male": {
-        "athleteFat": Decimal("18"),
-        "maxFat": Decimal("25"),
-        "minBmi": Decimal("25"),
-        "athleteBmi": Decimal("28"),
-        "leanCap": Decimal("0.5"),
+        "athlete_fat": Decimal("18"),
+        "max_fat": Decimal("25"),
+        "min_bmi": Decimal("25"),
+        "athlete_bmi": Decimal("28"),
+        "lean_cap": Decimal("0.5"),
     },
     "female": {
-        "athleteFat": Decimal("22"),
-        "maxFat": Decimal("30"),
-        "minBmi": Decimal("20"),
-        "athleteBmi": Decimal("24"),
-        "leanCap": Decimal("0.8"),
+        "athlete_fat": Decimal("22"),
+        "max_fat": Decimal("30"),
+        "min_bmi": Decimal("20"),
+        "athlete_bmi": Decimal("24"),
+        "lean_cap": Decimal("0.8"),
     },
     "na": {
-        "athleteFat": Decimal("20"),
-        "maxFat": Decimal("27"),
-        "minBmi": Decimal("22"),
-        "athleteBmi": Decimal("26"),
-        "leanCap": Decimal("0.65"),
+        "athlete_fat": Decimal("20"),
+        "max_fat": Decimal("27"),
+        "min_bmi": Decimal("22"),
+        "athlete_bmi": Decimal("26"),
+        "lean_cap": Decimal("0.65"),
     },
 }
 
 
-def q(value: Decimal | float | int, places: str = "0.01") -> Decimal:
+def q(value: Decimal | float | int, places: str = DEFAULT_DECIMAL_PLACES) -> Decimal:
     return Decimal(value).quantize(Decimal(places), rounding=ROUND_HALF_UP)
 
 
-def mifflin(weight: Decimal, height: Decimal, sex: str, age: int) -> Decimal:
-    return Decimal("10") * weight + Decimal("6.25") * height - Decimal("5") * Decimal(age) + MAFFLIN_SUFFIX[sex]
+def get_required_mapping_value(
+    mapping: dict[str, Decimal],
+    key: str,
+    field_name: str,
+) -> Decimal:
+    try:
+        return mapping[key]
+    except KeyError as exc:
+        raise ValueError(f"Invalid {field_name}: {key}") from exc
 
 
-def katch_mcardle(weight: Decimal, body_fat_percent: Decimal) -> Decimal:
-    lean_mass = weight * (Decimal("100") - body_fat_percent) / Decimal("100")
-    return Decimal("370") + Decimal("21.6") * lean_mass
+def calculate_mifflin_bmr(
+    weight: Decimal,
+    height: Decimal,
+    sex: str,
+    age: int,
+) -> Decimal:
+    sex_suffix = get_required_mapping_value(MIFFLIN_SEX_SUFFIX, sex, "sex")
+
+    return (
+        BMR_WEIGHT_COEFFICIENT * weight
+        + BMR_HEIGHT_COEFFICIENT * height
+        - BMR_AGE_COEFFICIENT * Decimal(age)
+        + sex_suffix
+    )
+
+
+def calculate_katch_mcardle_bmr(
+    weight: Decimal,
+    body_fat_percent: Decimal,
+) -> Decimal:
+    lean_mass = weight * (PERCENT - body_fat_percent) / PERCENT
+    return KATCH_BASE_VALUE + KATCH_LEAN_MASS_COEFFICIENT * lean_mass
 
 
 def calc_bmi(weight: Decimal, height_cm: Decimal) -> Decimal:
     height_m = height_cm / Decimal("100")
-    return weight / (height_m ** 2)
+    return weight / (height_m**2)
 
 
-def get_athlete_score(bmi: Decimal, body_fat_percent: Decimal, sex: str) -> Decimal:
-    thresholds = ATHLETE_THRESHOLDS[sex]
+def get_athlete_score(
+    bmi: Decimal,
+    body_fat_percent: Decimal,
+    sex: str,
+) -> Decimal:
+    thresholds = ATHLETE_THRESHOLDS.get(sex)
 
-    athlete_fat = thresholds["athleteFat"]
-    max_fat = thresholds["maxFat"]
-    min_bmi = thresholds["minBmi"]
-    athlete_bmi = thresholds["athleteBmi"]
-    lean_cap = thresholds["leanCap"]
+    if thresholds is None:
+        raise ValueError(f"Invalid sex: {sex}")
+
+    athlete_fat = thresholds["athlete_fat"]
+    max_fat = thresholds["max_fat"]
+    min_bmi = thresholds["min_bmi"]
+    athlete_bmi = thresholds["athlete_bmi"]
+    lean_cap = thresholds["lean_cap"]
 
     if body_fat_percent >= max_fat:
         return Decimal("0")
 
-    bfat_score = max(
+    body_fat_score = max(
         Decimal("0"),
         (max_fat - body_fat_percent) / (max_fat - athlete_fat),
     )
 
-    if bmi >= Decimal("30"):
+    if bmi >= BMI_OBESITY_THRESHOLD:
         if body_fat_percent <= athlete_fat:
             return Decimal("1")
+
         return Decimal("0")
 
     if bmi < min_bmi:
-        return min(Decimal("1"), bfat_score * lean_cap)
+        return min(Decimal("1"), body_fat_score * lean_cap)
 
     bmi_score = min(
         Decimal("1"),
-        lean_cap + ((Decimal("1") - lean_cap) * (bmi - min_bmi) / (athlete_bmi - min_bmi)),
+        lean_cap
+        + (
+            (Decimal("1") - lean_cap)
+            * (bmi - min_bmi)
+            / (athlete_bmi - min_bmi)
+        ),
     )
 
-    return min(Decimal("1"), bfat_score * bmi_score)
+    return min(Decimal("1"), body_fat_score * bmi_score)
 
 
 def calculate_bmr(
@@ -101,16 +178,29 @@ def calculate_bmr(
     age: int,
     body_fat_percent: Decimal | None = None,
 ) -> Decimal:
-    mifflin_bmr = mifflin(weight, height, sex, age)
+    mifflin_bmr = calculate_mifflin_bmr(
+        weight=weight,
+        height=height,
+        sex=sex,
+        age=age,
+    )
 
     if body_fat_percent is None:
         return q(mifflin_bmr)
 
     bmi = calc_bmi(weight, height)
-    athlete_coeff = get_athlete_score(bmi, body_fat_percent, sex)
-    mc_ardle_bmr = katch_mcardle(weight, body_fat_percent)
+    athlete_coefficient = get_athlete_score(
+        bmi=bmi,
+        body_fat_percent=body_fat_percent,
+        sex=sex,
+    )
+    katch_mcardle_bmr = calculate_katch_mcardle_bmr(weight, body_fat_percent)
 
-    result = mifflin_bmr * (Decimal("1") - athlete_coeff) + mc_ardle_bmr * athlete_coeff
+    result = (
+        mifflin_bmr * (Decimal("1") - athlete_coefficient)
+        + katch_mcardle_bmr * athlete_coefficient
+    )
+
     return q(result)
 
 
@@ -123,6 +213,11 @@ def calculate_tdee(
     activity: str,
     body_fat_percent: Decimal | None = None,
 ) -> Decimal:
+    activity_multiplier = get_required_mapping_value(
+        ACTIVITY_MULTIPLIERS,
+        activity,
+        "activity",
+    )
     bmr = calculate_bmr(
         weight=weight,
         height=height,
@@ -130,38 +225,99 @@ def calculate_tdee(
         age=age,
         body_fat_percent=body_fat_percent,
     )
-    return q(bmr * ACTIVITY_MULTIPLIERS[activity])
+
+    return q(bmr * activity_multiplier)
 
 
-def calculate_macro_targets(tdee: Decimal, goal: str) -> dict:
-    if goal == "cut":
-        target_kcal = tdee - Decimal("300")
-        protein_ratio = Decimal("0.30")
-        fat_ratio = Decimal("0.25")
-    elif goal == "bulk":
-        target_kcal = tdee + Decimal("300")
-        protein_ratio = Decimal("0.25")
-        fat_ratio = Decimal("0.25")
-    else:
-        target_kcal = tdee
-        protein_ratio = Decimal("0.25")
-        fat_ratio = Decimal("0.25")
+def calculate_macro_targets(tdee: Decimal, goal: str) -> dict[str, Decimal]:
+    calorie_adjustment = get_required_mapping_value(
+        GOAL_CALORIE_ADJUSTMENT,
+        goal,
+        "goal",
+    )
+    macro_ratios = GOAL_MACRO_RATIOS.get(goal)
 
-    protein_kcal = target_kcal * protein_ratio
-    fat_kcal = target_kcal * fat_ratio
-    carb_kcal = target_kcal - protein_kcal - fat_kcal
+    if macro_ratios is None:
+        raise ValueError(f"Invalid goal: {goal}")
+
+    target_calories = tdee + calorie_adjustment
+
+    protein_calories = target_calories * macro_ratios["protein"]
+    fat_calories = target_calories * macro_ratios["fat"]
+    carbs_calories = target_calories - protein_calories - fat_calories
 
     return {
-        "calories": q(target_kcal),
-        "protein_g": q(protein_kcal / Decimal("4")),
-        "fat_g": q(fat_kcal / Decimal("9")),
-        "carbs_g": q(carb_kcal / Decimal("4")),
+        "calories": q(target_calories),
+        "protein_g": q(protein_calories / CALORIES_PER_GRAM_PROTEIN),
+        "fat_g": q(fat_calories / CALORIES_PER_GRAM_FAT),
+        "carbs_g": q(carbs_calories / CALORIES_PER_GRAM_CARBS),
     }
 
 
 def get_micro_norms(*, age: int, sex: str):
-    return NutrientNorm.objects.filter(
-        age_min__lte=age,
-        age_max__gte=age,
-        sex__in=[sex, "na"],
-    ).select_related("nutrient").order_by("nutrient__name", "sex")
+    return (
+        NutrientNorm.objects.filter(
+            age_min__lte=age,
+            age_max__gte=age,
+            sex__in=[sex, "na"],
+        )
+        .select_related("nutrient")
+        .order_by("nutrient__name", "sex")
+    )
+
+
+def build_micro_targets(*, age: int, sex: str) -> list[dict]:
+    seen_nutrient_ids = set()
+    micro_targets = []
+
+    for norm in get_micro_norms(age=age, sex=sex):
+        if norm.nutrient_id in seen_nutrient_ids:
+            continue
+
+        seen_nutrient_ids.add(norm.nutrient_id)
+        micro_targets.append(
+            {
+                "nutrient_id": norm.nutrient.id,
+                "nutrient_name": norm.nutrient.name,
+                "unit": norm.nutrient.unit,
+                "recommended_amount": norm.recommended_amount,
+                "upper_limit": norm.upper_limit,
+                "source": norm.source,
+                "note": norm.note,
+            }
+        )
+
+    return micro_targets
+
+
+def calculate_norms_response(data: dict) -> dict:
+    bmi = q(calc_bmi(data["weight_kg"], data["height_cm"]))
+    bmr = calculate_bmr(
+        weight=data["weight_kg"],
+        height=data["height_cm"],
+        sex=data["sex"],
+        age=data["age"],
+        body_fat_percent=data.get("body_fat_percent"),
+    )
+    tdee = calculate_tdee(
+        weight=data["weight_kg"],
+        height=data["height_cm"],
+        sex=data["sex"],
+        age=data["age"],
+        activity=data["activity"],
+        body_fat_percent=data.get("body_fat_percent"),
+    )
+
+    return {
+        "bmi": bmi,
+        "bmr": bmr,
+        "tdee": tdee,
+        "macro_targets": calculate_macro_targets(
+            tdee,
+            data.get("goal", "maintenance"),
+        ),
+        "micro_targets": build_micro_targets(
+            age=data["age"],
+            sex=data["sex"],
+        ),
+    }
