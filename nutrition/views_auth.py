@@ -1,28 +1,27 @@
-from django.contrib.auth import get_user_model
-from django.contrib.auth.password_validation import validate_password
+from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.utils import extend_schema
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
 from nutrition.serializers_auth import (
+    ChangePasswordSerializer,
+    LoginSerializer,
+    LogoutSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     RegisterSerializer,
     UserSerializer,
-    LogoutSerializer,
-    LoginSerializer,
-    ChangePasswordSerializer,
-    PasswordResetConfirmSerializer,
-    PasswordResetRequestSerializer)
-import secrets
-from django.utils import timezone
-from rest_framework.permissions import AllowAny
-from .models import UserProfile
-from .services.email_service import send_welcome_email, send_verification_email, send_password_reset_email
-
+)
+from nutrition.services.auth import (
+    request_password_reset,
+    reset_password_by_token,
+    send_registration_verification,
+    verify_email_token,
+)
 
 
 @extend_schema(
@@ -40,14 +39,7 @@ class RegisterView(APIView):
 
         user = serializer.save()
 
-        profile = user.profile
-        profile.is_verified = False
-        profile.verified_at = None
-        profile.verification_token = secrets.token_urlsafe(32)
-        profile.save()
-
-        send_welcome_email(user)
-        send_verification_email(user, profile.verification_token)
+        send_registration_verification(user)
 
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
@@ -112,38 +104,14 @@ class VerifyEmailView(APIView):
 
     def get(self, request, *args, **kwargs):
         token = request.query_params.get("token")
-
-        if not token:
-            return Response(
-                {"detail": "Verification token is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            profile = UserProfile.objects.get(verification_token=token)
-        except UserProfile.DoesNotExist:
-            return Response(
-                {"detail": "Invalid verification token."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        profile.is_verified = True
-        profile.verified_at = timezone.now()
-        profile.verification_token = None
-        profile.save()
+        is_verified, message = verify_email_token(token)
 
         return Response(
-            {"detail": "Email verified successfully."},
-            status=status.HTTP_200_OK,
+            {"detail": message},
+            status=status.HTTP_200_OK if is_verified else status.HTTP_400_BAD_REQUEST,
         )
 
 
-@extend_schema(
-    summary="Change password",
-    description="Changes password of authenticated user.",
-    request=ChangePasswordSerializer,
-    responses={200: None},
-)
 @extend_schema(
     summary="Change password",
     description="Changes password of authenticated user.",
@@ -193,18 +161,7 @@ class PasswordResetRequestView(APIView):
         serializer.is_valid(raise_exception=True)
 
         email = serializer.validated_data["email"]
-        User = get_user_model()
-
-        user = User.objects.filter(email=email).first()
-
-        if user and hasattr(user, "profile"):
-            token = secrets.token_urlsafe(32)
-            profile = user.profile
-            profile.password_reset_token = token
-            profile.password_reset_requested_at = timezone.now()
-            profile.save()
-
-            send_password_reset_email(user, token)
+        request_password_reset(email)
 
         return Response(
             {
@@ -217,12 +174,6 @@ class PasswordResetRequestView(APIView):
         )
 
 
-@extend_schema(
-    summary="Confirm password reset",
-    description="Reset password using token from email.",
-    request=PasswordResetConfirmSerializer,
-    responses={200: None},
-)
 @extend_schema(
     summary="Confirm password reset",
     description="Resets password using reset token.",
@@ -239,26 +190,11 @@ class PasswordResetConfirmView(APIView):
         token = serializer.validated_data["token"]
         new_password = serializer.validated_data["new_password"]
 
-        profile = (
-            UserProfile.objects
-            .filter(password_reset_token=token)
-            .select_related("user")
-            .first()
-        )
-
-        if not profile:
+        if not reset_password_by_token(token=token, new_password=new_password):
             return Response(
                 {"detail": "Invalid reset token."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        user = profile.user
-        user.set_password(new_password)
-        user.save()
-
-        profile.password_reset_token = None
-        profile.password_reset_requested_at = None
-        profile.save(update_fields=["password_reset_token", "password_reset_requested_at"])
 
         return Response(
             {"detail": "Password has been reset successfully."},

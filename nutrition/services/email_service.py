@@ -20,7 +20,7 @@ def send_welcome_email(user) -> None:
 
 
 def send_verification_email(user, token: str) -> None:
-    verify_url = f"http://127.0.0.1:8000/api/v1/auth/verify/email/?token={token}"
+    verify_url = f"{settings.BACKEND_URL}/api/v1/auth/verify/email/?token={token}"
 
     subject = "Verify your email"
     message = (
@@ -40,7 +40,7 @@ def send_verification_email(user, token: str) -> None:
 
 
 def send_password_reset_email(user, token: str) -> None:
-    reset_url = f"http://127.0.0.1:8000/api/v1/auth/password-reset/confirm/?token={token}"
+    reset_url = f"{settings.BACKEND_URL}/api/v1/auth/password-reset/confirm/?token={token}"
 
     subject = "Reset your password"
     message = (
@@ -53,7 +53,7 @@ def send_password_reset_email(user, token: str) -> None:
     send_mail(
         subject=subject,
         message=message,
-        from_email="noreply@nutrition_app.local",
+        from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[user.email],
         fail_silently=False,
     )

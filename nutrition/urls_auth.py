@@ -1,16 +1,15 @@
 from django.urls import path
 
-from nutrition.serializers_auth import ChangePasswordSerializer
 from nutrition.views_auth import (
-    RegisterView,
-    LoginView,
-    RefreshView,
-    MeView,
-    LogoutView,
-    VerifyEmailView,
     ChangePasswordView,
-    PasswordResetRequestView,
+    LoginView,
+    LogoutView,
+    MeView,
     PasswordResetConfirmView,
+    PasswordResetRequestView,
+    RefreshView,
+    RegisterView,
+    VerifyEmailView,
 )
 
 urlpatterns = [
@@ -20,8 +19,11 @@ urlpatterns = [
     path("me/", MeView.as_view(), name="auth-me"),
     path("logout/", LogoutView.as_view(), name="auth-logout"),
     path("verify/email/", VerifyEmailView.as_view(), name="auth-verify-email"),
-
     path("change-password/", ChangePasswordView.as_view(), name="auth-change-password"),
     path("password-reset/", PasswordResetRequestView.as_view(), name="auth-password-reset"),
-    path("password-reset/confirm/", PasswordResetConfirmView.as_view(), name="auth-password-reset-confirm",),
+    path(
+        "password-reset/confirm/",
+        PasswordResetConfirmView.as_view(),
+        name="auth-password-reset-confirm",
+    ),
 ]
