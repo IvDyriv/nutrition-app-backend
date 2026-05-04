@@ -4,8 +4,9 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 
 from nutrition.serializers_auth import (
     ChangePasswordSerializer,
@@ -48,24 +49,60 @@ class RegisterView(APIView):
     summary="Login user",
     description="Returns JWT access and refresh tokens.",
 )
+
 class LoginView(TokenObtainPairView):
     permission_classes = [permissions.AllowAny]
     serializer_class = LoginSerializer
 
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
 
-@extend_schema(
-    summary="Refresh token",
-    description="Returns new access token and rotated refresh token.",
-)
-class RefreshView(TokenRefreshView):
-    permission_classes = [permissions.AllowAny]
+        access_token = response.data.get("access")
+        refresh_token = response.data.get("refresh")
+
+        set_auth_cookies(
+            response=response,
+            access_token=access_token,
+            refresh_token=refresh_token,
+        )
+
+        return response
 
 
-@extend_schema(
-    summary="Current user",
-    description="Returns currently authenticated user.",
-    responses={200: UserSerializer},
-)
+class RefreshView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        summary="Refresh token",
+        responses={200: None},
+    )
+    def post(self, request, *args, **kwargs):
+        refresh_token = request.COOKIES.get("refresh_token")
+
+        if not refresh_token:
+            refresh_token = request.data.get("refresh")
+
+        if not refresh_token:
+            return Response(
+                {"detail": "Refresh token is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        refresh = RefreshToken(refresh_token)
+        access = refresh.access_token
+
+        response = Response(
+            {
+                "detail": "Token refreshed successfully.",
+                "access": str(access),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+        set_auth_cookies(response, access)
+
+        return response
+
 class MeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -73,32 +110,35 @@ class MeView(APIView):
         return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
 
 
-class LogoutView(GenericAPIView):
+class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = LogoutSerializer
 
     @extend_schema(
-        request=LogoutSerializer,
-        responses={204: None},
-        summary="Logout user",
-        description="Blacklists refresh token.",
+        summary="Logout",
+        responses={205: None},
     )
     def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        refresh_token = request.COOKIES.get("refresh_token")
 
-        refresh_token = serializer.validated_data["refresh"]
-        token = RefreshToken(refresh_token)
-        token.blacklist()
+        if not refresh_token:
+            refresh_token = request.data.get("refresh")
 
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        if refresh_token:
+            try:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+            except TokenError:
+                pass
 
+        response = Response(
+            {"detail": "Logged out successfully."},
+            status=status.HTTP_205_RESET_CONTENT,
+        )
 
-@extend_schema(
-    summary="Verify email",
-    description="Verifies user email by token.",
-    responses={200: None, 400: None},
-)
+        delete_auth_cookies(response)
+
+        return response
+
 class VerifyEmailView(APIView):
     permission_classes = [AllowAny]
 
@@ -200,3 +240,31 @@ class PasswordResetConfirmView(APIView):
             {"detail": "Password has been reset successfully."},
             status=status.HTTP_200_OK,
         )
+
+from django.conf import settings
+
+
+def set_auth_cookies(response, access_token, refresh_token=None):
+    secure = not settings.DEBUG
+
+    response.set_cookie(
+        key="access_token",
+        value=str(access_token),
+        httponly=True,
+        secure=secure,
+        samesite="Lax",
+    )
+
+    if refresh_token:
+        response.set_cookie(
+            key="refresh_token",
+            value=str(refresh_token),
+            httponly=True,
+            secure=secure,
+            samesite="Lax",
+        )
+
+
+def delete_auth_cookies(response):
+    response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
